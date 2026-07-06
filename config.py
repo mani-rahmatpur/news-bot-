@@ -1,17 +1,1 @@
-import os
-
-# کلید دائمی و رایگان Gemini شما که مستقیماً در کد جایگذاری شده است
-API_KEY: str = "AQ.Ab8RN6LOiwb0ZjXdYI13vooUhpyqslFHolMer-3Ev_5tT74UBg"
-
-# تنظیم متغیر محیطی سیستم به صورت خودکار توسط خود پایتون
-os.environ["GEMINI_API_KEY"] = API_KEY
-
-# نام فایل دیتابیس
-DB_NAME: str = "news_database.db"
-
-# پرامپت اختصاصی شما برای پردازش متن خبر
-CUSTOM_SYSTEM_PROMPT: str = """
-You are an expert technology journalist. Translate the following news article into Persian (Farsi). 
-Provide a catchy headline, a brief 3-sentence summary, and 3 key bullet points. 
-Keep the tone professional and engaging.
-"""
+import os# کلید اختصاصی و رایگان Gemini شما که قبلاً فرستادیAPI_KEY: str = "AQ.Ab8RN6LOiwb0ZjXdYI13vooUhpyqslFHolMer-3Ev_5tT74UBg"os.environ["GEMINI_API_KEY"] = API_KEY# ----------------------------------------# تنظیمات تلگرام (این مقادیر را حتماً پر کن)# ----------------------------------------TELEGRAM_BOT_TOKEN: str = "8985686246:AAE01iSg9gMZxyrl-5JHS-a08BhvBV0kc7w"TELEGRAM_CHANNEL_ID: str = "@Techflowirannft"  # کانالی که اخبار در آن منتشر می‌شودADMIN_TELEGRAM_ID: int = 303475861  # آیدی عددی تلگرام خودت برای باز شدن پنلDB_NAME: str = "news_database.db"# پرامپت‌های تفکیک شده بر اساس لحن انتخابی شما در پنل مدیریتPROMPTS = {    "official": """You are an expert technology journalist. Translate the following news article into Persian (Farsi). Provide a catchy headline, a brief 3-sentence summary, and 3 key bullet points. Keep the tone professional, standard, and engaging.""",    "friendly": """You are a tech-savvy friend explaining a cool new technology update. Translate and rewrite this article in a casual, friendly, and conversational Persian (Farsi - لحن عامیانه و صمیمی شکسته‌نویسی). Provide an exciting headline and an easy-to-understand summary with emojis."""}# ----------------------------------------# وضعیت تست سیستم (جدید)# ----------------------------------------# اگر True باشد، دیتابیس در هر بار اجرای ربات خودکار پاک می‌شود تا راحت تست کنی.# قبل از انتقال به سرور اوبونتو، این مقدار را False کن.TEST_MODE: bool = True

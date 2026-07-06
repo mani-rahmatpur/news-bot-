@@ -5,8 +5,7 @@ from database import is_url_processed
 
 
 def scrape_techcrunch() -> List[Dict[str, str]]:
-    """اسکرپر بهینه‌سازی شده منطبق با ساختار جدید سایت تک‌کرانچ"""
-    url: str = "https://techcrunch.com/"
+    url: str = "https://techcrunch.com"
     headers: Dict[str, str] = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
@@ -15,29 +14,22 @@ def scrape_techcrunch() -> List[Dict[str, str]]:
     try:
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, "html.parser")
-
         links_found: List[str] = []
 
-        # ۱. ابتدا دنبال تگ‌های استاندارد مقاله می‌گردیم
         for article_tag in soup.find_all("article"):
             link_tag = article_tag.find("a", href=True)
             if link_tag:
                 href = str(link_tag["href"])
-                if "techcrunch.com/20" in href and href not in links_found:
+                if "://techcrunch.com" in href and href not in links_found:
                     links_found.append(href)
 
-        # ۲. اگر روش بالا لینک پیدا نکرد، تمام لینک‌های معتبر صفحه را جمع‌آوری می‌کنیم
         if not links_found:
             for a_tag in soup.find_all("a", href=True):
                 href = str(a_tag["href"])
-                if "techcrunch.com/20" in href and href not in links_found:
-                    # فیلتر برای حذف لینک کامنت‌ها
+                if "://techcrunch.com" in href and href not in links_found:
                     if "#comments" not in href:
                         links_found.append(href)
 
-        print(f"تعداد {len(links_found)} لینک خبر در صفحه اصلی پیدا شد.")
-
-        # پردازش ۳ خبر اول برای تست هوش مصنوعی
         for article_url in links_found[:3]:
             if not is_url_processed(article_url):
                 art_resp = requests.get(article_url, headers=headers, timeout=15)

@@ -2,33 +2,34 @@ import os
 from typing import Optional
 from google import genai
 from google.genai import types
-from config import CUSTOM_SYSTEM_PROMPT
+from config import API_KEY, PROMPTS
+import database
 
-# Fetch key from environment or use direct fallback if needed
-API_KEY: str = os.getenv("GEMINI_API_KEY", "your_fallback_key_here")
-
-# Initialize the official Google GenAI Client
+# راه‌اندازی کلاینت رسمی گوگل
 client = genai.Client(api_key=API_KEY)
 
 
 def process_news_with_ai(article_content: str) -> Optional[str]:
-    """Sends raw article text to Gemini 2.5 Flash for processing and translation."""
+    """ارسال متن خبر به Gemini با انتخاب لحن داینامیک از دیتابیس تنظیمات پنل ادمین"""
     try:
-        # Configure system instructions and low temperature for accuracy
+        current_tone = database.get_setting("bot_tone")
+        selected_prompt = PROMPTS.get(current_tone, PROMPTS["official"])
+
         config = types.GenerateContentConfig(
-            system_instruction=CUSTOM_SYSTEM_PROMPT,
+            system_instruction=selected_prompt,
             temperature=0.3,
         )
 
-        # Call the fast, modern Gemini 2.5 Flash model
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=article_content,
             config=config,
         )
 
-        # Return the clean processed text output
         if response.text:
+            # محاسبه تخمینی توکن مصرفی برای پنل گزارش وضعیت
+            approx_tokens = len(article_content) // 4 + len(response.text) // 4
+            database.update_stats(approx_tokens)
             return str(response.text)
         return None
 
