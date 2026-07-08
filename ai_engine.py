@@ -5,12 +5,12 @@ from google.genai import types
 from config import API_KEY, PROMPTS
 import database
 
-# راه‌اندازی کلاینت رسمی گوگل
+# راه‌اندازی کلاینت رسمی و تک‌محوره گوگل جمینای
 client = genai.Client(api_key=API_KEY)
 
 
 def process_news_with_ai(article_content: str) -> Optional[str]:
-    """ارسال متن خبر به Gemini با انتخاب لحن داینامیک از دیتابیس تنظیمات پنل ادمین"""
+    """ارسال متن خام خبر به Gemini با انتخاب لحن داینامیک و مکانیزم ضد کرش سرور"""
     try:
         current_tone = database.get_setting("bot_tone")
         selected_prompt = PROMPTS.get(current_tone, PROMPTS["official"])
@@ -27,12 +27,37 @@ def process_news_with_ai(article_content: str) -> Optional[str]:
         )
 
         if response.text:
-            # محاسبه تخمینی توکن مصرفی برای پنل گزارش وضعیت
             approx_tokens = len(article_content) // 4 + len(response.text) // 4
             database.update_stats(approx_tokens)
             return str(response.text)
         return None
 
-    except Exception as e:
-        print(f"Gemini API Error: {e}")
+    except Exception as ai_err:
+        # در صورت بروز خطای شبکه یا API گوگل، سرور کرش نمی‌کند، فقط لاگ می‌دهد
+        print(f"[RECOVERY] خطا در موتور متن هوش مصنوعی: {ai_err}. ربات زنده می‌ماند.")
+        return None
+
+
+def generate_image_with_ai(article_title: str) -> Optional[bytes]:
+    """تولید عکس اختصاصی متناسب با تیتر خبر با مکانیزم بازیابی خودکار در صورت محدودیت API"""
+    try:
+        print(f"[AI IMAGE] در حال تولید عکس اختصاصی با جمینای برای خبر: {article_title}")
+        image_prompt = f"A high-quality, modern, cinematic, and clean conceptual digital art or tech illustration representing this topic: {article_title}. Professional technology journalism style, 16:9 aspect ratio."
+
+        result = client.models.generate_images(
+            model='imagen-3.0-generate-002',
+            prompt=image_prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                output_mime_type="image/jpeg",
+                aspect_ratio="16:9",
+                person_generation="DONT_ALLOW"
+            )
+        )
+        for generated_image in result.generated_images:
+            return generated_image.image.image_bytes
+        return None
+    except Exception as img_err:
+        # اگر لایه تصویرساز به خاطر محدودیت اکانت رایگان خطا داد، سیستم رد می‌شود تا خبر بدون عکس یا با عکس سایت فرستاده شود
+        print(f"[RECOVERY] خطا در تصویرساز هوش مصنوعی: {img_err}. سیستم به تصویر پشتیبان سوئیچ می‌کند.")
         return None
