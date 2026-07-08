@@ -2,26 +2,28 @@ import logging
 import asyncio
 import html
 import re
+import io
 import sys
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-from apscheduler.schedulers.background import BackgroundScheduler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import database
-from ai_engine import process_news_with_ai
+from ai_engine import process_news_with_ai, generate_image_with_ai
+# ایمپورت کردن اسکرپرهای ۳ وب‌سایت مرجع تکنولوژی
 from scrapers.techcrunch import scrape_techcrunch
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, ADMIN_TELEGRAM_ID
+from scrapers.zoomit import scrape_zoomit
+from scrapers.digiato import scrape_digiato
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, ADMIN_TELEGRAM_ID, ADMIN_PASSWORD
 
-# تنظیمات پایه‌ای لاگ سیستم
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.ERROR
-)
+# تنظیم لایه لاگ روی خطاهای بحرانی برای تمیز ماندن محیط ترمینال
+logging.basicConfig(level=logging.ERROR)
 
 pending_news = {}
+user_editing_state = {}
 
 
 def clean_html_formatting(text: str) -> str:
-    """تبدیل ستاره‌های مارک‌داون به HTML استاندارد و حذف تگ‌های نامنظم مخرب"""
+    """پاک‌سازی متون هوش مصنوعی و هماهنگ کردن ستاره‌های مارک‌داون با تگ‌های امن HTML تلگرام"""
     text = html.escape(text)
     text = text.replace("&amp;", "&")
     pattern = re.compile(r'\*\*(.*?)\*\*')
@@ -30,207 +32,593 @@ def clean_html_formatting(text: str) -> str:
     return text
 
 
-async def send_safe_long_message(app_bot, chat_id, text: str, reply_markup=None, is_channel=False):
-    """ارسال هوشمند پیام‌ها برای جلوگیری از ارور طولانی بودن متون"""
-    MAX_LENGTH = 3800
-    if len(text) <= MAX_LENGTH:
-        try:
-            return await app_bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="HTML")
-        except Exception:
-            return await app_bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
-
-    chunks = [text[i:i + MAX_LENGTH] for i in range(0, len(text), MAX_LENGTH)]
-    first_msg = None
-    for idx, chunk in enumerate(chunks):
-        current_markup = reply_markup if idx == len(chunks) - 1 else None
-        try:
-            msg = await app_bot.send_message(chat_id=chat_id, text=chunk, reply_markup=current_markup,
-                                             parse_mode="HTML")
-        except Exception:
-            msg = await app_bot.send_message(chat_id=chat_id, text=chunk, reply_markup=current_markup)
-        if idx == 0 and is_channel:
-            first_msg = msg
-    return first_msg if is_channel else None
+def get_persian_tone_name(tone: str) -> str:
+    """تبدیل کلید انگلیسی لحن به نام فارسی همراه با اموجی جهت نمایش زنده روی دکمه پنل"""
+    if tone == "official":
+        return "👔 رسمی"
+    elif tone == "friendly":
+        return "🤙 صمیمی"
+    elif tone == "funny":
+        return "🤪 شوخی"
+    return "👔 رسمی"
 
 
-# ==========================================
-# بخش موتور اصلی ربات (اسکرپ و پردازش)
-# ==========================================
+async def send_safe_news(
+    app_bot,
+    chat_id,
+    text: str,
+    image_data=None,
+    fallback_url: str = "",
+    reply_markup=None
+):
+    """
+    ارسال امن خبر به تلگرام با مدیریت خطاها
+    """
+
+    try:
+        MAX_CAPTION_LENGTH = 1000
+        MAX_TEXT_LENGTH = 3800
+
+        # ابتدا تلاش برای ارسال عکس تولید شده توسط AI
+        if image_data:
+            try:
+                photo_file = io.BytesIO(image_data)
+                photo_file.name = "news.jpg"
+
+                if len(text) <= MAX_CAPTION_LENGTH:
+                    return await app_bot.send_photo(
+                        chat_id=chat_id,
+                        photo=photo_file,
+                        caption=text,
+                        parse_mode="HTML",
+                        reply_markup=reply_markup
+                    )
+
+                await app_bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo_file
+                )
+
+            except Exception as photo_err:
+                print(f"[PHOTO ERROR] {photo_err}")
+
+        # اگر عکس AI نبود از عکس سایت استفاده کن
+        elif fallback_url:
+            try:
+                if len(text) <= MAX_CAPTION_LENGTH:
+                    return await app_bot.send_photo(
+                        chat_id=chat_id,
+                        photo=fallback_url,
+                        caption=text,
+                        parse_mode="HTML",
+                        reply_markup=reply_markup
+                    )
+
+                await app_bot.send_photo(
+                    chat_id=chat_id,
+                    photo=fallback_url
+                )
+
+            except Exception as fallback_err:
+                print(f"[FALLBACK PHOTO ERROR] {fallback_err}")
+
+        # ارسال متن
+        if len(text) <= MAX_TEXT_LENGTH:
+            return await app_bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+
+        # اگر متن خیلی بلند بود تقسیم شود
+        chunks = [
+            text[i:i + MAX_TEXT_LENGTH]
+            for i in range(0, len(text), MAX_TEXT_LENGTH)
+        ]
+
+        for index, chunk in enumerate(chunks):
+
+            current_markup = (
+                reply_markup
+                if index == len(chunks) - 1
+                else None
+            )
+
+            await app_bot.send_message(
+                chat_id=chat_id,
+                text=chunk,
+                parse_mode="HTML",
+                reply_markup=current_markup
+            )
+
+        return True
+
+    except Exception as send_err:
+        print(f"[SEND ERROR] {send_err}")
+        return False
+
+# =============================================================
+# بخش موتور اصلی ربات (اسکرپ موازی و ۳ تایی اخبار)
+# =============================================================
 async def check_and_process_news(app_bot) -> None:
-    if database.get_setting("bot_status") == "OFF":
-        print("[SYSTEM] ربات خاموش است. عملیات اسکرپ انجام نشد.")
-        return
+    """جمع‌آوری اخبار و ارسال پیش‌نویس برای تایید ادمین"""
 
-    print("[SYSTEM] اسکرپر در حال جستجوی اخبار تکنولوژی...")
-    articles = scrape_techcrunch()
+    try:
+        if database.get_setting("bot_status") == "OFF":
+            return
 
-    for art in articles:
-        print(f"[SYSTEM] ارسال به هوش مصنوعی برای پردازش خبر: {art['title']}")
-        ai_text = process_news_with_ai(art["content"])
+        print("[SYSTEM] شروع بررسی اخبار...")
 
-        if ai_text:
-            news_id = str(hash(art["url"]))
-            pending_news[news_id] = {
-                "url": art["url"],
-                "title": art["title"],
-                "text": ai_text
-            }
+        all_articles = []
+
+        try:
+            all_articles.extend(scrape_techcrunch())
+        except Exception as e:
+            print(f"[TECHCRUNCH ERROR] {e}")
+
+        try:
+            all_articles.extend(scrape_zoomit())
+        except Exception as e:
+            print(f"[ZOOMIT ERROR] {e}")
+
+        try:
+            all_articles.extend(scrape_digiato())
+        except Exception as e:
+            print(f"[DIGIATO ERROR] {e}")
+
+        if not all_articles:
+            print("[SYSTEM] هیچ خبری پیدا نشد.")
+            return
+
+        for art in all_articles:
+            print(f"[STEP 1] خبر پیدا شد: {art['title']}")
+
+            try:
+                source_name = art.get("source", "نامشخص")
+
+                print(
+                    f"[SYSTEM] پردازش خبر [{source_name}] : "
+                    f"{art['title']}"
+                )
+
+                ai_text = process_news_with_ai(
+                    art["content"]
+                )
+                print("[STEP 2] پردازش AI تمام شد")
+                if not ai_text:
+                    print(
+                        f"[AI FALLBACK] "
+                        f"{art['title']}"
+                    )
+
+                    ai_text = (
+                        f"{art['title']}\n\n"
+                        f"{art['content'][:1500]}"
+                    )
+
+                ai_image_bytes = generate_image_with_ai(
+                    art["title"]
+                )
+
+                news_id = str(
+                    hash(art["url"])
+                )
+
+                pending_news[news_id] = {
+                    "url": art["url"],
+                    "title": art["title"],
+                    "text": ai_text,
+                    "ai_image": ai_image_bytes,
+                    "fallback_image": art.get(
+                        "image",
+                        ""
+                    )
+                }
+
+                keyboard = [
+                    [
+                        InlineKeyboardButton(
+                            "🔥 برچسب فوری",
+                            callback_data=f"urgent_{news_id}"
+                        ),
+                        InlineKeyboardButton(
+                            "✅ ارسال عادی",
+                            callback_data=f"normal_{news_id}"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "✏️ ویرایش متن خبر",
+                            callback_data=f"edit_{news_id}"
+                        ),
+                        InlineKeyboardButton(
+                            "❌ حذف و رد کردن",
+                            callback_data=f"skip_{news_id}"
+                        )
+                    ]
+                ]
+
+                reply_markup = InlineKeyboardMarkup(
+                    keyboard
+                )
+
+                safe_text = clean_html_formatting(
+                    ai_text
+                )
+
+                preview_msg = (
+                    f"📰 <b>پیش‌نویس خبر ({source_name})</b>\n\n"
+                    f"{safe_text}\n\n"
+                    f"<b>لینک اصلی:</b>\n"
+                    f"{html.escape(art['url'])}"
+                )
+
+                print("[STEP 3] آماده ارسال پیش‌نمایش")
+                await send_safe_news(
+                    app_bot,
+                    ADMIN_TELEGRAM_ID,
+                    preview_msg,
+                    ai_image_bytes,
+                    art.get("image", ""),
+                    reply_markup=reply_markup
+                )
+                print("[STEP 4] تابع send_safe_news تمام شد")
+                print(
+                    f"[PREVIEW SENT] "
+                    f"{art['title']}"
+                )
+
+            except Exception as article_err:
+                print(
+                    f"[ARTICLE ERROR] "
+                    f"{article_err}"
+                )
+
+    except Exception as core_err:
+        print(
+            f"[RECOVERY] "
+            f"خطای کلی سیستم: "
+            f"{core_err}"
+        )
+
+# -------------------------------------------------------------
+# بخش کنترل پنل ادمین و مدیریت دکمه‌های تلگرام
+# -------------------------------------------------------------
+async def start_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """نمایش پنل کنترل ادمین با ارسال دستور /start (بررسی سطح دسترسی با رمز عبور)"""
+    try:
+        user_id = update.effective_user.id
+        await update.message.reply_text(
+            f"Your Telegram ID: {user_id}"
+        )
+
+        if user_id == ADMIN_TELEGRAM_ID or database.is_user_admin(user_id):
+            status = database.get_setting("bot_status")
+            tone = database.get_setting("bot_tone")
+            persian_tone = get_persian_tone_name(tone)
 
             keyboard = [
-                [
-                    InlineKeyboardButton("🔥 برچسب فوری بزن", callback_data=f"urgent_{news_id}"),
-                    InlineKeyboardButton("✅ ارسال عادی", callback_data=f"normal_{news_id}")
-                ],
-                [InlineKeyboardButton("❌ حذف و نادیده گرفتن", callback_data=f"skip_{news_id}")]
+                [InlineKeyboardButton(f"وضعیت: {'🟢 روشن' if status == 'ON' else '🔴 خاموش'}",
+                                      callback_data="toggle_status"),
+                 InlineKeyboardButton(f"لحن: {persian_tone}", callback_data="toggle_tone")],
+                [InlineKeyboardButton("📊 آمار مصرف امروز", callback_data="view_stats"),
+                 InlineKeyboardButton("🔄 پردازش اخبار", callback_data="run_now")]
             ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            safe_text = clean_html_formatting(ai_text)
-            preview_msg = f"📰 <b>پیش‌نویس خبر جدید توسط هوش مصنوعی:</b>\n\n{safe_text}\n\n<b>لینک اصلی:</b>\n{html.escape(art['url'])}"
-
-            await send_safe_long_message(app_bot, ADMIN_TELEGRAM_ID, preview_msg, reply_markup=reply_markup)
-
-
-def run_scheduler(loop, app_bot):
-    """انتقال امن عملیات کرون‌جاب به لوپ اصلی سیستم Asyncio"""
-    asyncio.run_coroutine_threadsafe(check_and_process_news(app_bot), loop)
+            await update.message.reply_text("🎛 <b>به پنل مدیریت سیستم هوشمند ۳ موتوره خوش آمدید:</b>",
+                                            reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            await update.message.reply_text("🔒 <b>دسترسی محدود است!</b>\nلطفاً رمز عبور مدیریت ربات را ارسال کنید:")
+    except Exception:
+        pass
 
 
-# ==========================================
-# بخش کنترل پنل ادمین (دکمه‌های ربات تلگرام)
-# ==========================================
-async def start_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user.id != ADMIN_TELEGRAM_ID:
-        return
+async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """مدیریت پیام‌های متنی چت: تفکیک بین وضعیت ادمین در حال ویرایش خبر یا کاربر در حال ارسال رمز عبور"""
+    try:
+        user_id = update.effective_user.id
+        incoming_text = update.message.text
 
-    status = database.get_setting("bot_status")
-    tone = database.get_setting("bot_tone")
+        if user_id in user_editing_state:
+            news_id = user_editing_state[user_id]
+            if news_id in pending_news:
+                pending_news[news_id]["text"] = incoming_text
+                keyboard = [[InlineKeyboardButton("🔥 برچسب فوری", callback_data=f"urgent_{news_id}"),
+                             InlineKeyboardButton("✅ ارسال عادی", callback_data=f"normal_{news_id}")],
+                            [InlineKeyboardButton("✏️ دوباره ویرایش کن", callback_data=f"edit_{news_id}"),
+                             InlineKeyboardButton("❌ حذف و رد کردن", callback_data=f"skip_{news_id}")]]
+                safe_text = clean_html_formatting(incoming_text)
+                preview_msg = f"📝 <b>پیش‌نویس خبر ویرایش و اصلاح شد:</b>\n\n{safe_text}\n\n<b>لینک اصلی:</b>\n{html.escape(pending_news[news_id]['url'])}"
+                await send_safe_news(context.application.bot, user_id, preview_msg,
+                                     pending_news[news_id].get("ai_image"), pending_news[news_id].get("fallback_image"),
+                                     reply_markup=InlineKeyboardMarkup(keyboard))
+            if user_id in user_editing_state: del user_editing_state[user_id]
+            return
 
-    keyboard = [
-        [
-            InlineKeyboardButton(f"وضعیت: {'🟢 روشن' if status == 'ON' else '🔴 خاموش'}", callback_data="toggle_status"),
-            InlineKeyboardButton(f"لحن: {'👔 رسمی' if tone == 'official' else '🤙 صمیمی'}", callback_data="toggle_tone")
-        ],
-        [
-            InlineKeyboardButton("🔄 پردازش اخبار", callback_data="run_now"),
-            InlineKeyboardButton("📊 گزارش آمار امروز", callback_data="view_stats")
-        ]
-    ]
-    await update.message.reply_text("🎛 <b>به پنل مدیریت سیستم هوشمند خوش آمدید:</b>",
-                                    reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        if incoming_text == ADMIN_PASSWORD:
+            database.add_authenticated_admin(user_id)
+            await update.message.reply_text(
+                "🔓 <b>هویت شما با موفقیت تایید شد!</b>\nاکنون برای باز شدن پنل مدیریت، مجدداً دستور /start را ارسال کنید.")
+        elif user_id != ADMIN_TELEGRAM_ID and not database.is_user_admin(user_id):
+            await update.message.reply_text("❌ <b>رمز عبور اشتباه است!</b> دسترسی صادر نشد.")
+    except Exception:
+        pass
 
 
 async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    data = query.data
+    """مدیریت تمام دکمه‌های پنل و پیش‌نویس اخبار"""
 
-    if data == "toggle_status":
+    try:
+        query = update.callback_query
         await query.answer()
-        current = database.get_setting("bot_status")
-        new_status = "OFF" if current == "ON" else "ON"
-        database.update_setting("bot_status", new_status)
-        status = new_status
-        tone = database.get_setting("bot_tone")
-        keyboard = [
-            [InlineKeyboardButton(f"وضعیت: {'🟢 روشن' if status == 'ON' else '🔴 خاموش'}", callback_data="toggle_status"),
-             InlineKeyboardButton(f"لحن: {'👔 رسمی' if tone == 'official' else '🤙 صمیمی'}",
-                                  callback_data="toggle_tone")],
-            [InlineKeyboardButton("🔄 پردازش اخبار", callback_data="run_now"),
-             InlineKeyboardButton("📊 گزارش آمار امروز", callback_data="view_stats")]]
-        await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif data == "toggle_tone":
-        current = database.get_setting("bot_tone")
-        new_tone = "friendly" if current == "official" else "official"
-        database.update_setting("bot_tone", new_tone)
+        data = query.data
+        user_id = query.from_user.id
 
-        persian_tone_name = "👔 رسمی" if new_tone == "official" else "🤙 صمیمی"
-        await query.answer(text=f"✨ لحن هوش مصنوعی به {persian_tone_name} تغییر کرد!", show_alert=False)
+        if user_id != ADMIN_TELEGRAM_ID and not database.is_user_admin(user_id):
+            await query.answer(
+                "🔒 شما دسترسی مدیریت این بخش را ندارید!",
+                show_alert=True
+            )
+            return
 
-        status = database.get_setting("bot_status")
-        keyboard = [
-            [InlineKeyboardButton(f"وضعیت: {'🟢 روشن' if status == 'ON' else '🔴 خاموش'}", callback_data="toggle_status"),
-             InlineKeyboardButton(f"لحن: {'👔 رسمی' if new_tone == 'official' else '🤙 صمیمی'}",
-                                  callback_data="toggle_tone")],
-            [InlineKeyboardButton("🔄 پردازش اخبار", callback_data="run_now"),
-             InlineKeyboardButton("📊 گزارش آمار امروز", callback_data="view_stats")]]
-        await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(keyboard))
+        # =========================
+        # وضعیت روشن/خاموش
+        # =========================
+        if data == "toggle_status":
 
-    elif data == "run_now":
-        await query.answer()
-        await query.message.reply_text("🔄 اسکرپر فعال شد. در حال جمع‌آوری اخبار زنده...")
-        asyncio.create_task(check_and_process_news(context.application.bot))
+            current = database.get_setting("bot_status")
+            new_status = "OFF" if current == "ON" else "ON"
 
-    elif data == "view_stats":
-        await query.answer()
-        count, tokens = database.get_today_stats()
-        await query.message.reply_text(
-            f"📊 <b>گزارش عملکرد امروز:</b>\n\n• اخبار پردازش شده: {count} خبر\n• کل مصرف توکن تخمینی: {tokens} توکن",
-            parse_mode="HTML")
+            database.update_setting("bot_status", new_status)
 
-    elif "_" in data:
-        await query.answer()
-        action, news_id = data.split("_")
-        if news_id in pending_news:
-            news_data = pending_news[news_id]
-            safe_channel_text = clean_html_formatting(news_data['text'])
+            tone = database.get_setting("bot_tone")
+            persian_tone = get_persian_tone_name(tone)
 
-            if action == "urgent":
-                final_text = f"🚨 🔥 <b>#فوری</b> 🔥 🚨\n\n{safe_channel_text}\n\n🌐 {html.escape(news_data['url'])}"
-                msg = await send_safe_long_message(context.application.bot, TELEGRAM_CHANNEL_ID, final_text,
-                                                   is_channel=True)
-                if msg:
-                    try:
-                        await context.application.bot.pin_chat_message(chat_id=TELEGRAM_CHANNEL_ID,
-                                                                       message_id=msg.message_id)
-                    except Exception:
-                        pass
-                await query.edit_message_text("🔥 خبر فوری در کانال منتشر شد.")
-                database.mark_url_as_processed(news_data["url"], news_data["title"])
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        f"وضعیت: {'🟢 روشن' if new_status == 'ON' else '🔴 خاموش'}",
+                        callback_data="toggle_status"
+                    ),
+                    InlineKeyboardButton(
+                        f"لحن: {persian_tone}",
+                        callback_data="toggle_tone"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📊 آمار",
+                        callback_data="view_stats"
+                    ),
+                    InlineKeyboardButton(
+                        "🔄 اخبار",
+                        callback_data="run_now"
+                    )
+                ]
+            ]
 
-            elif action == "normal":
-                final_text = f"{safe_channel_text}\n\n🌐 {html.escape(news_data['url'])}"
-                await send_safe_long_message(context.application.bot, TELEGRAM_CHANNEL_ID, final_text, is_channel=True)
-                await query.edit_message_text("✅ خبر به صورت عادی در کانال منتشر شد.")
-                database.mark_url_as_processed(news_data["url"], news_data["title"])
+            await query.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
 
-            elif action == "skip":
-                await query.edit_message_text("❌ خبر حذف شد.")
-                database.mark_url_as_processed(news_data["url"], news_data["title"])
+        # =========================
+        # تغییر لحن
+        # =========================
+        elif data == "toggle_tone":
+
+            current = database.get_setting("bot_tone")
+
+            if current == "official":
+                new_tone = "friendly"
+            elif current == "friendly":
+                new_tone = "funny"
+            else:
+                new_tone = "official"
+
+            database.update_setting("bot_tone", new_tone)
+
+            status = database.get_setting("bot_status")
+            persian_tone = get_persian_tone_name(new_tone)
+
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        f"وضعیت: {'🟢 روشن' if status == 'ON' else '🔴 خاموش'}",
+                        callback_data="toggle_status"
+                    ),
+                    InlineKeyboardButton(
+                        f"لحن: {persian_tone}",
+                        callback_data="toggle_tone"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📊 آمار",
+                        callback_data="view_stats"
+                    ),
+                    InlineKeyboardButton(
+                        "🔄 اخبار",
+                        callback_data="run_now"
+                    )
+                ]
+            ]
+
+            await query.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+        # =========================
+        # آمار
+        # =========================
+        elif data == "view_stats":
+
+            articles, tokens = database.get_today_stats()
+
+            await query.message.reply_text(
+                f"📊 آمار امروز\n\n"
+                f"تعداد اخبار: {articles}\n"
+                f"توکن مصرفی: {tokens}"
+            )
+
+        # =========================
+        # پردازش دستی اخبار
+        # =========================
+        elif data == "run_now":
+
+            await query.message.reply_text(
+                "⏳ در حال بررسی اخبار..."
+            )
+
+            await check_and_process_news(
+                context.application.bot
+            )
+
+        # =========================
+        # ارسال عادی
+        # =========================
+        elif data.startswith("normal_"):
+
+            news_id = data.replace("normal_", "")
+
+            if news_id not in pending_news:
+                await query.message.reply_text(
+                    "❌ خبر پیدا نشد."
+                )
+                return
+
+            news = pending_news[news_id]
+
+            await send_safe_news(
+                context.application.bot,
+                TELEGRAM_CHANNEL_ID,
+                news["text"],
+                news.get("ai_image"),
+                news.get("fallback_image", "")
+            )
+
+            database.mark_url_as_processed(
+                news["url"],
+                news["title"]
+            )
 
             del pending_news[news_id]
 
+            await query.edit_message_text(
+                "✅ خبر با موفقیت در کانال منتشر شد."
+            )
 
-# ==========================================
-# تابع راه‌اندازی و اجرای استاندارد لوپ پایتون
-# ==========================================
-async def main_async():
-    database.init_db()
-    loop = asyncio.get_running_loop()
+        # =========================
+        # ارسال فوری
+        # =========================
+        elif data.startswith("urgent_"):
 
+            news_id = data.replace("urgent_", "")
+
+            if news_id not in pending_news:
+                await query.message.reply_text(
+                    "❌ خبر پیدا نشد."
+                )
+                return
+
+            news = pending_news[news_id]
+
+            urgent_text = (
+                "🚨 #فوری\n\n"
+                + news["text"]
+            )
+
+            await send_safe_news(
+                context.application.bot,
+                TELEGRAM_CHANNEL_ID,
+                urgent_text,
+                news.get("ai_image"),
+                news.get("fallback_image", "")
+            )
+
+            database.mark_url_as_processed(
+                news["url"],
+                news["title"]
+            )
+
+            del pending_news[news_id]
+
+            await query.edit_message_text(
+                "🔥 خبر فوری در کانال منتشر شد."
+            )
+
+        # =========================
+        # ویرایش خبر
+        # =========================
+        elif data.startswith("edit_"):
+
+            news_id = data.replace("edit_", "")
+
+            if news_id not in pending_news:
+                await query.message.reply_text(
+                    "❌ خبر پیدا نشد."
+                )
+                return
+
+            user_editing_state[user_id] = news_id
+
+            await query.message.reply_text(
+                "✏️ متن جدید خبر را ارسال کنید."
+            )
+
+        # =========================
+        # حذف خبر
+        # =========================
+        elif data.startswith("skip_"):
+
+            news_id = data.replace("skip_", "")
+
+            if news_id in pending_news:
+                del pending_news[news_id]
+
+            await query.edit_message_text(
+                "❌ خبر حذف شد."
+            )
+
+    except Exception as e:
+        print(f"[BUTTON ERROR] {e}")
+
+
+async def periodic_news_check(context: ContextTypes.DEFAULT_TYPE):
+    """بررسی دوره‌ای اخبار"""
+    await check_and_process_news(context.bot)
+
+
+def main():
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start_panel))
-    application.add_handler(CallbackQueryHandler(handle_panel_buttons))
 
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(run_scheduler, 'interval', hours=2, args=[loop, application.bot])
-    scheduler.start()
+    application.add_handler(
+        CommandHandler("start", start_panel)
+    )
 
-    print("[SUCCESS] ربات با تنظیمات یکپارچه لود شد. در تلگرام دستور /start را بزنید.")
+    application.add_handler(
+        CallbackQueryHandler(handle_panel_buttons)
+    )
 
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_text_messages
+        )
+    )
 
-    while True:
-        await asyncio.sleep(3600)
+    application.job_queue.run_repeating(
+        periodic_news_check,
+        interval=900,
+        first=10
+    )
+
+    print("[SYSTEM] Telegram Bot Started")
+
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES
+    )
 
 
 if __name__ == "__main__":
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    try:
-        asyncio.run(main_async())
-    except KeyboardInterrupt:
-        print("\n[SYSTEM] ربات متوقف شد.")
+    main()
