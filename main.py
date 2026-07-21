@@ -21,6 +21,16 @@ logging.basicConfig(level=logging.ERROR)
 pending_news = {}
 user_editing_state = {}
 
+diagnostic = {
+    "techcrunch": 0,
+    "zoomit": 0,
+    "digiato": 0,
+    "gemini": "OK",
+    "image_ai": "OK",
+    "telegram": "OK",
+    "last_error": "-"
+}
+
 
 def clean_html_formatting(text: str) -> str:
     """پاک‌سازی متون هوش مصنوعی و هماهنگ کردن ستاره‌های مارک‌داون با تگ‌های امن HTML تلگرام"""
@@ -30,6 +40,39 @@ def clean_html_formatting(text: str) -> str:
     text = pattern.sub(r'<b>\1</b>', text)
     text = text.replace("<b></b>", "")
     return text
+
+def generate_hashtags(text: str) -> str:
+    """
+    تولید هشتگ ساده از متن خبر
+    """
+
+    words = text.split()
+
+    hashtags = []
+
+    keywords = [
+        "هوش_مصنوعی",
+        "فناوری",
+        "تکنولوژی",
+        "گجت",
+        "موبایل",
+        "اینترنت",
+        "گوگل",
+        "اپل",
+        "مایکروسافت",
+        "ربات",
+        "کامپیوتر",
+        "امنیت"
+    ]
+
+    for word in keywords:
+        if word.replace("_", " ") in text:
+            hashtags.append("#" + word)
+
+    if not hashtags:
+        hashtags.append("#اخبار_فناوری")
+
+    return " ".join(hashtags)
 
 
 def get_persian_tone_name(tone: str) -> str:
@@ -134,86 +177,192 @@ async def send_safe_news(
 
         return True
 
+
     except Exception as send_err:
+
         print(f"[SEND ERROR] {send_err}")
-        return False
+
+        try:
+
+            import main
+
+            main.diagnostic["telegram"] = str(send_err)
+
+        except:
+
+            pass
 
 # =============================================================
 # بخش موتور اصلی ربات (اسکرپ موازی و ۳ تایی اخبار)
 # =============================================================
 async def check_and_process_news(app_bot) -> None:
-    """جمع‌آوری اخبار و ارسال پیش‌نویس برای تایید ادمین"""
+    """
+    جمع‌آوری، پردازش و ارسال پیش‌نمایش اخبار
+    نسخه پایدار با لاگ و عیب‌یابی کامل
+    """
+
+    global diagnostic
 
     try:
+
         if database.get_setting("bot_status") == "OFF":
+            print("[SYSTEM] Bot is OFF")
             return
 
         print("[SYSTEM] شروع بررسی اخبار...")
 
         all_articles = []
 
+        diagnostic["techcrunch"] = 0
+        diagnostic["zoomit"] = 0
+        diagnostic["digiato"] = 0
+
+        # -------------------------
+        # TechCrunch
+        # -------------------------
+
         try:
-            all_articles.extend(scrape_techcrunch())
+            tc_articles = scrape_techcrunch()
+
+            diagnostic["techcrunch"] = len(tc_articles)
+
+            all_articles.extend(tc_articles)
+
+            print(
+                f"[SCRAPER] TechCrunch -> {len(tc_articles)} article(s)"
+            )
+
         except Exception as e:
+
+            diagnostic["last_error"] = f"TechCrunch: {e}"
+
             print(f"[TECHCRUNCH ERROR] {e}")
 
+        # -------------------------
+        # Zoomit
+        # -------------------------
+
         try:
-            all_articles.extend(scrape_zoomit())
+            zoomit_articles = scrape_zoomit()
+
+            diagnostic["zoomit"] = len(zoomit_articles)
+
+            all_articles.extend(zoomit_articles)
+
+            print(
+                f"[SCRAPER] Zoomit -> {len(zoomit_articles)} article(s)"
+            )
+
         except Exception as e:
+
+            diagnostic["last_error"] = f"Zoomit: {e}"
+
             print(f"[ZOOMIT ERROR] {e}")
 
+        # -------------------------
+        # Digiato
+        # -------------------------
+
         try:
-            all_articles.extend(scrape_digiato())
+            digiato_articles = scrape_digiato()
+
+            diagnostic["digiato"] = len(digiato_articles)
+
+            all_articles.extend(digiato_articles)
+
+            print(
+                f"[SCRAPER] Digiato -> {len(digiato_articles)} article(s)"
+            )
+
         except Exception as e:
+
+            diagnostic["last_error"] = f"Digiato: {e}"
+
             print(f"[DIGIATO ERROR] {e}")
 
+        # -------------------------
+
         if not all_articles:
-            print("[SYSTEM] هیچ خبری پیدا نشد.")
+
+            print("[SYSTEM] هیچ خبری پیدا نشد")
+
+            diagnostic["last_error"] = "No articles found"
+
             return
 
+        print(
+            f"[SYSTEM] مجموع اخبار پیدا شده: {len(all_articles)}"
+        )
+
+        # ==================================================
+        # پردازش اخبار
+        # ==================================================
+
         for art in all_articles:
-            print(f"[STEP 1] خبر پیدا شد: {art['title']}")
 
             try:
-                source_name = art.get("source", "نامشخص")
+
+                title = art.get("title", "بدون عنوان")
+                url = art.get("url", "")
+                content = art.get("content", "")
+                source = art.get("source", "نامشخص")
 
                 print(
-                    f"[SYSTEM] پردازش خبر [{source_name}] : "
-                    f"{art['title']}"
+                    f"[PROCESSING] {source} -> {title}"
                 )
 
-                ai_text = process_news_with_ai(
-                    art["content"]
-                )
-                print("[STEP 2] پردازش AI تمام شد")
+                # جلوگیری از تکرار
+
+                if url and database.is_url_processed(url):
+
+                    print(
+                        f"[SKIPPED] قبلاً ارسال شده: {title}"
+                    )
+
+                    continue
+
+                # ------------------
+                # AI
+                # ------------------
+                print("\n===================")
+                print("TITLE:", title)
+                print("CONTENT PREVIEW:")
+                print(content[:1000])
+                print("===================\n")
+                ai_text = process_news_with_ai(content)
+
                 if not ai_text:
                     print(
-                        f"[AI FALLBACK] "
-                        f"{art['title']}"
+                        f"[AI FALLBACK] {title}"
                     )
 
                     ai_text = (
-                        f"{art['title']}\n\n"
-                        f"{art['content'][:1500]}"
+                        f"📰 {title}\n\n"
+                        f"{content[:1500]}\n\n"
+                        f"🏷 #TechFlow #IranNFT"
                     )
+                # ------------------
+                # IMAGE
+                # ------------------
 
-                ai_image_bytes = generate_image_with_ai(
-                    art["title"]
-                )
+                ai_image = None
 
-                news_id = str(
-                    hash(art["url"])
-                )
+                news_id = str(hash(url))
+
+                status = database.get_setting("bot_status") or "ON"
+
+                tone = database.get_setting("tone") or "formal"
+                persian_tone = get_persian_tone_name(tone)
+
+                hashtags = generate_hashtags(ai_text)
 
                 pending_news[news_id] = {
-                    "url": art["url"],
-                    "title": art["title"],
+                    "url": url,
+                    "title": title,
                     "text": ai_text,
-                    "ai_image": ai_image_bytes,
-                    "fallback_image": art.get(
-                        "image",
-                        ""
-                    )
+                    "ai_text": ai_text,
+                    "ai_image": ai_image,
+                    "fallback_image": art.get("image", "")
                 }
 
                 keyboard = [
@@ -229,7 +378,7 @@ async def check_and_process_news(app_bot) -> None:
                     ],
                     [
                         InlineKeyboardButton(
-                            "✏️ ویرایش متن خبر",
+                            "✏️ دوباره ویرایش کن",
                             callback_data=f"edit_{news_id}"
                         ),
                         InlineKeyboardButton(
@@ -239,49 +388,46 @@ async def check_and_process_news(app_bot) -> None:
                     ]
                 ]
 
-                reply_markup = InlineKeyboardMarkup(
-                    keyboard
+                preview_text = (
+                    f"📰 <b>پیش‌نویس خبر ({source})</b>\n\n"
+                    f"{clean_html_formatting(ai_text)}\n\n"
+                    f"{hashtags}\n\n"
+                    f"<b>لینک:</b>\n"
+                    f"{html.escape(url)}"
                 )
 
-                safe_text = clean_html_formatting(
-                    ai_text
-                )
-
-                preview_msg = (
-                    f"📰 <b>پیش‌نویس خبر ({source_name})</b>\n\n"
-                    f"{safe_text}\n\n"
-                    f"<b>لینک اصلی:</b>\n"
-                    f"{html.escape(art['url'])}"
-                )
-
-                print("[STEP 3] آماده ارسال پیش‌نمایش")
                 await send_safe_news(
                     app_bot,
                     ADMIN_TELEGRAM_ID,
-                    preview_msg,
-                    ai_image_bytes,
+                    preview_text,
+                    ai_image,
                     art.get("image", ""),
-                    reply_markup=reply_markup
-                )
-                print("[STEP 4] تابع send_safe_news تمام شد")
-                print(
-                    f"[PREVIEW SENT] "
-                    f"{art['title']}"
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
 
-            except Exception as article_err:
                 print(
-                    f"[ARTICLE ERROR] "
-                    f"{article_err}"
+                    f"[PREVIEW SENT] {title}"
                 )
 
-    except Exception as core_err:
+            except Exception as article_error:
+
+                diagnostic["last_error"] = str(article_error)
+
+                print(
+                    f"[ARTICLE ERROR] {article_error}"
+                )
+
+                continue
+
+        print("[SYSTEM] پایان چرخه پردازش اخبار")
+
+    except Exception as e:
+
+        diagnostic["last_error"] = str(e)
+
         print(
-            f"[RECOVERY] "
-            f"خطای کلی سیستم: "
-            f"{core_err}"
+            f"[FATAL ERROR] {e}"
         )
-
 # -------------------------------------------------------------
 # بخش کنترل پنل ادمین و مدیریت دکمه‌های تلگرام
 # -------------------------------------------------------------
@@ -299,11 +445,26 @@ async def start_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             persian_tone = get_persian_tone_name(tone)
 
             keyboard = [
-                [InlineKeyboardButton(f"وضعیت: {'🟢 روشن' if status == 'ON' else '🔴 خاموش'}",
-                                      callback_data="toggle_status"),
-                 InlineKeyboardButton(f"لحن: {persian_tone}", callback_data="toggle_tone")],
-                [InlineKeyboardButton("📊 آمار مصرف امروز", callback_data="view_stats"),
-                 InlineKeyboardButton("🔄 پردازش اخبار", callback_data="run_now")]
+                [
+                    InlineKeyboardButton(
+                        "🔥 برچسب فوری",
+                        callback_data=f"urgent_{news_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "✅ ارسال عادی",
+                        callback_data=f"normal_{news_id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "✏️ دوباره ویرایش کن",
+                        callback_data=f"edit_{news_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "❌ حذف و رد کردن",
+                        callback_data=f"skip_{news_id}"
+                    )
+                ]
             ]
             await update.message.reply_text("🎛 <b>به پنل مدیریت سیستم هوشمند ۳ موتوره خوش آمدید:</b>",
                                             reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
@@ -346,7 +507,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """مدیریت تمام دکمه‌های پنل و پیش‌نویس اخبار"""
+    """مدیریت کامل دکمه‌های پنل و تایید اخبار"""
 
     try:
         query = update.callback_query
@@ -357,28 +518,34 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
 
         if user_id != ADMIN_TELEGRAM_ID and not database.is_user_admin(user_id):
             await query.answer(
-                "🔒 شما دسترسی مدیریت این بخش را ندارید!",
+                "🔒 شما دسترسی مدیریت ندارید!",
                 show_alert=True
             )
             return
 
         # =========================
-        # وضعیت روشن/خاموش
+        # پنل مدیریت
         # =========================
+
         if data == "toggle_status":
 
             current = database.get_setting("bot_status")
             new_status = "OFF" if current == "ON" else "ON"
 
-            database.update_setting("bot_status", new_status)
+            database.update_setting(
+                "bot_status",
+                new_status
+            )
 
+            status = new_status
             tone = database.get_setting("bot_tone")
+
             persian_tone = get_persian_tone_name(tone)
 
             keyboard = [
                 [
                     InlineKeyboardButton(
-                        f"وضعیت: {'🟢 روشن' if new_status == 'ON' else '🔴 خاموش'}",
+                        f"وضعیت: {'🟢 روشن' if status == 'ON' else '🔴 خاموش'}",
                         callback_data="toggle_status"
                     ),
                     InlineKeyboardButton(
@@ -395,6 +562,12 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
                         "🔄 اخبار",
                         callback_data="run_now"
                     )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🩺 عیب‌یابی",
+                        callback_data="diagnostic"
+                    )
                 ]
             ]
 
@@ -402,9 +575,6 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
-        # =========================
-        # تغییر لحن
-        # =========================
         elif data == "toggle_tone":
 
             current = database.get_setting("bot_tone")
@@ -416,7 +586,10 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 new_tone = "official"
 
-            database.update_setting("bot_tone", new_tone)
+            database.update_setting(
+                "bot_tone",
+                new_tone
+            )
 
             status = database.get_setting("bot_status")
             persian_tone = get_persian_tone_name(new_tone)
@@ -441,6 +614,12 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
                         "🔄 اخبار",
                         callback_data="run_now"
                     )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🩺 عیب‌یابی",
+                        callback_data="diagnostic"
+                    )
                 ]
             ]
 
@@ -448,9 +627,6 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
-        # =========================
-        # آمار
-        # =========================
         elif data == "view_stats":
 
             articles, tokens = database.get_today_stats()
@@ -461,30 +637,40 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"توکن مصرفی: {tokens}"
             )
 
-        # =========================
-        # پردازش دستی اخبار
-        # =========================
         elif data == "run_now":
 
             await query.message.reply_text(
-                "⏳ در حال بررسی اخبار..."
+                "⏳ شروع پردازش اخبار..."
             )
 
             await check_and_process_news(
                 context.application.bot
             )
 
+        elif data == "diagnostic":
+
+            report = (
+                f"🩺 گزارش سلامت سیستم\n\n"
+                f"TechCrunch: {diagnostic.get('techcrunch',0)}\n"
+                f"Zoomit: {diagnostic.get('zoomit',0)}\n"
+                f"Digiato: {diagnostic.get('digiato',0)}\n\n"
+                f"Gemini:\n{diagnostic.get('gemini','OK')}\n\n"
+                f"Image AI:\n{diagnostic.get('image_ai','OK')}\n\n"
+                f"Telegram:\n{diagnostic.get('telegram','OK')}\n\n"
+                f"Last Error:\n{diagnostic.get('last_error','-')}"
+            )
+
+            await query.message.reply_text(report)
+
         # =========================
-        # ارسال عادی
+        # دکمه‌های خبر
         # =========================
+
         elif data.startswith("normal_"):
 
             news_id = data.replace("normal_", "")
 
             if news_id not in pending_news:
-                await query.message.reply_text(
-                    "❌ خبر پیدا نشد."
-                )
                 return
 
             news = pending_news[news_id]
@@ -504,37 +690,39 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
 
             del pending_news[news_id]
 
-            await query.edit_message_text(
-                "✅ خبر با موفقیت در کانال منتشر شد."
+            await query.message.reply_text(
+                "✅ خبر به کانال ارسال شد."
             )
 
-        # =========================
-        # ارسال فوری
-        # =========================
         elif data.startswith("urgent_"):
 
             news_id = data.replace("urgent_", "")
 
             if news_id not in pending_news:
-                await query.message.reply_text(
-                    "❌ خبر پیدا نشد."
-                )
                 return
 
             news = pending_news[news_id]
 
             urgent_text = (
-                "🚨 #فوری\n\n"
+                "🚨 خبر فوری\n\n"
                 + news["text"]
             )
 
-            await send_safe_news(
+            msg = await send_safe_news(
                 context.application.bot,
                 TELEGRAM_CHANNEL_ID,
-                urgent_text,
+                news["ai_text"],
                 news.get("ai_image"),
                 news.get("fallback_image", "")
             )
+
+            try:
+                await context.application.bot.pin_chat_message(
+                    TELEGRAM_CHANNEL_ID,
+                    msg.message_id
+                )
+            except:
+                pass
 
             database.mark_url_as_processed(
                 news["url"],
@@ -543,22 +731,13 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
 
             del pending_news[news_id]
 
-            await query.edit_message_text(
-                "🔥 خبر فوری در کانال منتشر شد."
+            await query.message.reply_text(
+                "🚨 خبر فوری ارسال و پین شد."
             )
 
-        # =========================
-        # ویرایش خبر
-        # =========================
         elif data.startswith("edit_"):
 
             news_id = data.replace("edit_", "")
-
-            if news_id not in pending_news:
-                await query.message.reply_text(
-                    "❌ خبر پیدا نشد."
-                )
-                return
 
             user_editing_state[user_id] = news_id
 
@@ -566,9 +745,6 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
                 "✏️ متن جدید خبر را ارسال کنید."
             )
 
-        # =========================
-        # حذف خبر
-        # =========================
         elif data.startswith("skip_"):
 
             news_id = data.replace("skip_", "")
@@ -576,12 +752,15 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
             if news_id in pending_news:
                 del pending_news[news_id]
 
-            await query.edit_message_text(
+            await query.message.reply_text(
                 "❌ خبر حذف شد."
             )
 
     except Exception as e:
-        print(f"[BUTTON ERROR] {e}")
+
+        print(
+            f"[BUTTON ERROR] {e}"
+        )
 
 
 async def periodic_news_check(context: ContextTypes.DEFAULT_TYPE):
