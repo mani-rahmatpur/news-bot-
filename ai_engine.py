@@ -32,9 +32,21 @@ def process_news_with_ai(article_content: str) -> Optional[str]:
             return str(response.text)
         return None
 
+
     except Exception as ai_err:
-        # در صورت بروز خطای شبکه یا API گوگل، سرور کرش نمی‌کند، فقط لاگ می‌دهد
-        print(f"[RECOVERY] خطا در موتور متن هوش مصنوعی: {ai_err}. ربات زنده می‌ماند.")
+
+        print(ai_err)
+
+        try:
+
+            import main
+
+            main.diagnostic["gemini"] = str(ai_err)
+
+        except:
+
+            pass
+
         return None
 
 
