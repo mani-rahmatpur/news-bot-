@@ -1,3 +1,4 @@
+from filters import is_technology_relevant
 import requests
 from bs4 import BeautifulSoup
 from typing import List, Dict
@@ -94,6 +95,11 @@ def scrape_zoomit() -> List[Dict[str, str]]:
                 )
 
                 if len(content) < 300:
+                    continue
+
+                    
+                if not is_technology_relevant(title, content):
+                    print(f"[SCRAPER FILTERED] {title}")
                     continue
 
                 articles.append({
