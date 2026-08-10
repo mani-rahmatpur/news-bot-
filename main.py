@@ -13,6 +13,7 @@ from ai_engine import process_news_with_ai, generate_image_with_ai
 from scrapers.techcrunch import scrape_techcrunch
 from scrapers.zoomit import scrape_zoomit
 from scrapers.digiato import scrape_digiato
+from filters import is_technology_relevant
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, ADMIN_TELEGRAM_ID, ADMIN_PASSWORD
 
 # تنظیم لایه لاگ روی خطاهای بحرانی برای تمیز ماندن محیط ترمینال
@@ -329,6 +330,14 @@ async def check_and_process_news(app_bot) -> None:
                 print("CONTENT PREVIEW:")
                 print(content[:1000])
                 print("===================\n")
+                result = is_technology_relevant(title, content)
+
+                print(f"[FILTER CHECK] {title}")
+                print(f"[FILTER RESULT] {result}")
+
+                if not result:
+                    print(f"[FILTERED] {title}")
+                    continue
                 ai_text = process_news_with_ai(content)
 
                 if not ai_text:
