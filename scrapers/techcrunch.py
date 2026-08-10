@@ -1,53 +1,108 @@
-from typing import List, Dict
 import requests
 from bs4 import BeautifulSoup
+from typing import List, Dict
 from database import is_url_processed
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 
 def scrape_techcrunch() -> List[Dict[str, str]]:
-    url: str = "https://techcrunch.com"
-    headers: Dict[str, str] = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-    articles: List[Dict[str, str]] = []
+    articles = []
 
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(
+            "https://techcrunch.com",
+            headers=HEADERS,
+            timeout=20
+        )
+
         soup = BeautifulSoup(response.text, "html.parser")
-        links_found: List[str] = []
 
-        for article_tag in soup.find_all("article"):
-            link_tag = article_tag.find("a", href=True)
-            if link_tag:
-                href = str(link_tag["href"])
-                if "://techcrunch.com" in href and href not in links_found:
-                    links_found.append(href)
+        links = set()
 
-        if not links_found:
-            for a_tag in soup.find_all("a", href=True):
-                href = str(a_tag["href"])
-                if "://techcrunch.com" in href and href not in links_found:
-                    if "#comments" not in href:
-                        links_found.append(href)
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
 
-        for article_url in links_found[:3]:
-            if not is_url_processed(article_url):
-                art_resp = requests.get(article_url, headers=headers, timeout=15)
-                art_soup = BeautifulSoup(art_resp.text, "html.parser")
+            if (
+                    href.startswith("https://techcrunch.com/")
+                    and len(href) > 50
+                    and "/video/" not in href
+                    and "/podcast/" not in href
+                    and "/author/" not in href
+                    and "/tag/" not in href
+                    and "/category/" not in href
+                    and "/events/" not in href
+                    and "#" not in href
+            ):
+                links.add(href)
 
-                title_tag = art_soup.find("h1")
-                article_title = title_tag.text.strip() if title_tag else "TechCrunch Update"
+        print(f"[SCRAPER] TechCrunch Links Found: {len(links)}")
 
-                paragraphs = art_soup.find_all("p")
-                full_text: str = " ".join([p.text for p in paragraphs])
+        for article_url in list(links)[:5]:
 
-                if len(full_text.strip()) > 100:
-                    articles.append({
-                        "url": article_url,
-                        "title": article_title,
-                        "content": full_text[:4000]
-                    })
+            if is_url_processed(article_url):
+                continue
+
+            try:
+
+                article_response = requests.get(
+                    article_url,
+                    headers=HEADERS,
+                    timeout=20
+                )
+
+                article_soup = BeautifulSoup(
+                    article_response.text,
+                    "html.parser"
+                )
+
+                title = ""
+
+                if article_soup.find("meta", property="og:title"):
+                    title = article_soup.find(
+                        "meta",
+                        property="og:title"
+                    ).get("content", "")
+
+                if not title:
+                    h1 = article_soup.find("h1")
+                    title = h1.text.strip() if h1 else "TechCrunch Update"
+
+                image = ""
+
+                og_img = article_soup.find(
+                    "meta",
+                    property="og:image"
+                )
+
+                if og_img:
+                    image = og_img.get("content", "")
+
+                paragraphs = article_soup.find_all("p")
+
+                content = " ".join(
+                    p.get_text(" ", strip=True)
+                    for p in paragraphs
+                )
+
+                if len(content) < 300:
+                    continue
+
+                articles.append({
+                    "url": article_url,
+                    "title": title,
+                    "content": content[:6000],
+                    "image": image,
+                    "source": "TechCrunch"
+                })
+
+            except Exception as e:
+                print(f"[ARTICLE ERROR] {e}")
+
     except Exception as e:
-        print(f"Error scraping TechCrunch: {e}")
+        print(f"[SCRAPER ERROR] TechCrunch: {e}")
 
+    print(f"[SCRAPER] TechCrunch -> {len(articles)} article(s)")
     return articles
