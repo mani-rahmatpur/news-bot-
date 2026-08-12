@@ -1,8 +1,13 @@
+import re
+
+
+# ============================================================
+# Crypto
+# ============================================================
+
 CRYPTO_KEYWORDS = [
     "bitcoin",
-    "btc",
     "ethereum",
-    "eth",
     "crypto",
     "cryptocurrency",
     "blockchain",
@@ -10,189 +15,381 @@ CRYPTO_KEYWORDS = [
     "nft",
     "token",
     "defi",
-    "متاورس",
-    "بلاکچین",
-    "ارز دیجیتال",
-    "رمزارز",
-    "رمز ارز",
-    "بیت کوین",
-    "اتریوم",
 ]
 
+
+# ============================================================
+# Artificial Intelligence
+# ============================================================
 
 AI_KEYWORDS = [
-    "artificial intelligence",
-    "artificial intelligence",
     "ai",
-    "openai",
-    "chatgpt",
-    "gemini",
-    "claude",
-    "grok",
-    "llm",
+    "artificial intelligence",
+    "generative ai",
     "machine learning",
     "deep learning",
-    "generative ai",
-    "هوش مصنوعی",
-    "یادگیری ماشین",
-    "یادگیری عمیق",
-    "مدل زبانی",
-    "مدل هوش مصنوعی",
-    "عامل هوش مصنوعی",
-    "ایجنت هوش مصنوعی",
+    "llm",
+    "large language model",
+    "language model",
+    "gpt",
+    "chatgpt",
+    "openai",
+    "anthropic",
+    "claude",
+    "gemini",
+    "copilot",
 ]
 
+
+# ============================================================
+# General Technology
+# ============================================================
 
 TECH_KEYWORDS = [
+    "technology",
+    "tech",
+    "software",
+    "hardware",
+    "developer",
+    "programming",
+    "coding",
+    "computer",
+    "processor",
+    "cpu",
+    "gpu",
     "chip",
     "chips",
-    "processor",
-    "gpu",
-    "cpu",
-    "npu",
     "semiconductor",
-    "cybersecurity",
-    "cyber security",
-    "hacking",
-    "hack",
+    "operating system",
+    "linux",
+    "windows",
+    "android",
+    "ios",
+    "apple",
+    "microsoft",
+    "google",
+]
+
+
+# ============================================================
+# Cloud / Data
+# ============================================================
+
+CLOUD_DATA_KEYWORDS = [
     "cloud",
     "cloud computing",
+    "cloud infrastructure",
+    "aws",
+    "azure",
+    "google cloud",
     "data center",
-    "datacenter",
+    "data centre",
+    "database",
+    "data breach",
+]
+
+
+# ============================================================
+# Security
+# ============================================================
+
+SECURITY_KEYWORDS = [
+    "security",
+    "cybersecurity",
+    "cyber security",
+    "hack",
+    "hacker",
+    "hacking",
+    "malware",
+    "ransomware",
+    "phishing",
+    "vulnerability",
+    "exploit",
+    "zero-day",
+    "0-day",
+    "data breach",
+    "privacy",
+]
+
+
+# ============================================================
+# Robotics / Automation
+# ============================================================
+
+ROBOTICS_KEYWORDS = [
     "robot",
+    "robots",
     "robotics",
-    "space",
-    "spacex",
-    "starship",
-    "مایکروسافت",
-    "اپل",
-    "گوگل",
-    "پردازنده",
-    "پردازنده گرافیکی",
-    "تراشه",
-    "تراشه‌ها",
-    "نیمه‌رسانا",
-    "امنیت سایبری",
-    "هک",
-    "ربات",
-    "رباتیک",
-    "کلاد",
-    "رایانش ابری",
-    "دیتاسنتر",
+    "humanoid",
+    "autonomous",
+    "automation",
+    "drone",
+    "robotaxi",
 ]
 
 
-# موضوعاتی که معمولاً برای کانال ما مناسب نیستند
-# مخصوصاً اخبار خرید، قیمت و بررسی محصول
-SHOPPING_KEYWORDS = [
-    "قیمت",
-    "خرید",
-    "راهنمای خرید",
-    "بهترین گوشی",
-    "بهترین لپ تاپ",
-    "بهترین لپتاپ",
-    "گوشی اقتصادی",
-    "لپ تاپ اقتصادی",
-    "لپتاپ اقتصادی",
-    "بررسی قیمت",
-    "مقایسه قیمت",
-    "تخفیف",
-    "فروش ویژه",
-    "اقساط",
+# ============================================================
+# Startup / Business Technology
+# ============================================================
+
+STARTUP_BUSINESS_KEYWORDS = [
+    "startup",
+    "startups",
+    "venture",
+    "funding",
+    "fundraising",
+    "acquisition",
+    "investment",
+    "valuation",
+    "enterprise",
+    "saas",
 ]
 
 
-# این کلمات به تنهایی نباید باعث حذف شوند.
-# فقط زمانی حذف می‌کنیم که موضوع خبر واقعاً محصول مصرفی باشد.
-CONSUMER_PRODUCT_KEYWORDS = [
-    "گوشی",
-    "موبایل",
-    "لپ تاپ",
-    "لپتاپ",
-    "تبلت",
-    "ساعت هوشمند",
-    "هدفون",
-    "ایرباد",
-    "شارژر",
+# ============================================================
+# Block / Reject Keywords
+#
+# این کلمات فقط روی TITLE بررسی می‌شوند.
+# ============================================================
+
+BLOCK_KEYWORDS = [
+    "price",
+    "pricing",
+    "buy",
+    "buying guide",
+    "purchase",
+    "deal",
+    "deals",
+    "discount",
+    "best phone",
+    "best phones",
+    "best laptop",
+    "best laptops",
+    "budget phone",
+    "budget phones",
+    "budget laptop",
+    "budget laptops",
+    "price comparison",
 ]
 
 
-def _contains_keyword(text, keywords):
-    for keyword in keywords:
-        if keyword.lower() in text:
-            return True
-    return False
+# ============================================================
+# همه کلیدواژه‌های تکنولوژی
+# ============================================================
+
+ALL_TECH_KEYWORDS = (
+    CRYPTO_KEYWORDS
+    + AI_KEYWORDS
+    + TECH_KEYWORDS
+    + CLOUD_DATA_KEYWORDS
+    + SECURITY_KEYWORDS
+    + ROBOTICS_KEYWORDS
+    + STARTUP_BUSINESS_KEYWORDS
+)
 
 
-def is_technology_relevant(title, content):
+# ============================================================
+# نرمال‌سازی متن
+# ============================================================
+
+def normalize_text(text: str) -> str:
+    """
+    نرمال‌سازی ساده برای جست‌وجوی دقیق‌تر.
+    """
+
+    if not text:
+        return ""
+
+    text = text.lower()
+
+    # حذف فاصله‌های اضافی
+    text = re.sub(r"\s+", " ", text)
+
+    # تبدیل بعضی علائم به فاصله
+    text = re.sub(r"[_/|]+", " ", text)
+
+    return text.strip()
+
+
+# ============================================================
+# تطبیق کلمه یا عبارت
+# ============================================================
+
+def keyword_matches(text: str, keyword: str) -> bool:
+    """
+    بررسی دقیق یک keyword.
+
+    برای کلمات کوتاه مثل:
+        ai
+        cpu
+        gpu
+        aws
+
+    از word boundary استفاده می‌کنیم تا
+    داخل کلمات دیگر match نشوند.
+
+    برای عبارت‌های چندکلمه‌ای نیز
+    همین روش تا حد زیادی از false positive جلوگیری می‌کند.
+    """
+
+    text = normalize_text(text)
+    keyword = normalize_text(keyword)
+
+    if not text or not keyword:
+        return False
+
+    escaped_keyword = re.escape(keyword)
+
+    pattern = rf"(?<![a-z0-9]){escaped_keyword}(?![a-z0-9])"
+
+    return re.search(
+        pattern,
+        text,
+        flags=re.IGNORECASE
+    ) is not None
+
+
+# ============================================================
+# تشخیص زبان انگلیسی
+# ============================================================
+
+def is_english_text(text: str) -> bool:
+    """
+    جلوگیری از ورود محتوای فارسی یا غیرانگلیسی.
+
+    منبع باید عمدتاً انگلیسی باشد.
+    """
+
+    if not text:
+        return False
+
+    persian_chars = 0
+    latin_chars = 0
+
+    for char in text:
+
+        if (
+            "\u0600"
+            <= char
+            <= "\u06FF"
+        ):
+            persian_chars += 1
+
+        elif (
+            "a"
+            <= char.lower()
+            <= "z"
+        ):
+            latin_chars += 1
+
+    # برای متن بسیار کوتاه
+    if latin_chars < 20:
+        return False
+
+    # اگر متن فارسی قابل‌توجهی داشته باشد
+    if persian_chars > 20:
+        return False
+
+    # نسبت حروف انگلیسی به فارسی
+    total_letters = (
+        latin_chars
+        + persian_chars
+    )
+
+    if total_letters == 0:
+        return False
+
+    english_ratio = (
+        latin_chars
+        / total_letters
+    )
+
+    return english_ratio >= 0.85
+
+
+# ============================================================
+# تشخیص ارتباط تکنولوژیک
+# ============================================================
+
+def is_technology_relevant(
+    title: str,
+    content: str
+) -> bool:
+    """
+    بررسی می‌کند آیا خبر:
+    1. انگلیسی است
+    2. خبر خرید / قیمت / راهنمای خرید نیست
+    3. حداقل در یکی از حوزه‌های فناوری قرار دارد
+    """
 
     title = title or ""
     content = content or ""
 
-    title_lower = title.lower()
-    content_lower = content.lower()
+    normalized_title = normalize_text(title)
+    normalized_content = normalize_text(content)
 
-    text = f"{title_lower} {content_lower}"
+    full_text = (
+        f"{normalized_title} "
+        f"{normalized_content}"
+    ).strip()
 
-    # -------------------------------------------------
-    # 1. حذف مستقیم اخبار خرید / قیمت / تخفیف
-    # -------------------------------------------------
+    # ========================================================
+    # 1. زبان
+    # ========================================================
 
-    if _contains_keyword(title_lower, SHOPPING_KEYWORDS):
+    if not is_english_text(full_text):
+
+        print(
+            f"[FILTER NON-ENGLISH] {title}"
+        )
+
         return False
 
-    # -------------------------------------------------
-    # 2. اخبار Crypto همیشه اولویت دارند
-    # -------------------------------------------------
+    # ========================================================
+    # 2. حذف خبرهای خرید / قیمت
+    #
+    # فقط TITLE بررسی می‌شود تا عباراتی که در متن مقاله
+    # آمده‌اند باعث حذف اشتباه خبر نشوند.
+    # ========================================================
 
-    if _contains_keyword(text, CRYPTO_KEYWORDS):
-        return True
+    for keyword in BLOCK_KEYWORDS:
 
-    # -------------------------------------------------
-    # 3. اخبار AI
-    # -------------------------------------------------
+        if keyword_matches(
+            normalized_title,
+            keyword
+        ):
 
-    if _contains_keyword(text, AI_KEYWORDS):
-        return True
-
-    # -------------------------------------------------
-    # 4. اخبار تکنولوژی زیرساختی
-    # -------------------------------------------------
-
-    if _contains_keyword(text, TECH_KEYWORDS):
-
-        # اگر خبر صرفاً درباره محصول مصرفی باشد
-        # ولی موضوع تکنولوژیک جدی نداشته باشد، حذف شود.
-
-        if _contains_keyword(title_lower, CONSUMER_PRODUCT_KEYWORDS):
-
-            # اگر در عنوان محصول مصرفی آمده ولی
-            # همزمان AI / Crypto / Tech واقعی دارد،
-            # اجازه عبور می‌دهیم.
-
-            if (
-                _contains_keyword(text, AI_KEYWORDS)
-                or _contains_keyword(text, CRYPTO_KEYWORDS)
-                or _contains_keyword(text, [
-                    "chip",
-                    "processor",
-                    "gpu",
-                    "cpu",
-                    "npu",
-                    "semiconductor",
-                    "تراشه",
-                    "پردازنده",
-                    "نیمه‌رسانا",
-                ])
-            ):
-                return True
+            print(
+                f"[FILTER BLOCK] "
+                f"{keyword} -> {title}"
+            )
 
             return False
 
-        return True
+    # ========================================================
+    # 3. بررسی حوزه‌های تکنولوژی
+    # ========================================================
 
-    # -------------------------------------------------
-    # 5. در غیر این صورت خبر نامرتبط است
-    # -------------------------------------------------
+    for keyword in ALL_TECH_KEYWORDS:
+
+        if keyword_matches(
+            full_text,
+            keyword
+        ):
+
+            print(
+                f"[FILTER MATCH] "
+                f"{keyword} -> {title}"
+            )
+
+            return True
+
+    # ========================================================
+    # 4. بدون تطابق
+    # ========================================================
+
+    print(
+        f"[FILTER NO MATCH] {title}"
+    )
 
     return False
