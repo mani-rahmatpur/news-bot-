@@ -9,10 +9,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import database
 from ai_engine import process_news_with_ai, generate_image_with_ai
-# ایمپورت کردن اسکرپرهای ۳ وب‌سایت مرجع تکنولوژی
+# ایمپورت کردن اسکرپرهای منابع انگلیسی
 from scrapers.techcrunch import scrape_techcrunch
-from scrapers.zoomit import scrape_zoomit
-from scrapers.digiato import scrape_digiato
+from scrapers.ars_technica import scrape_ars_technica
 from filters import is_technology_relevant
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, ADMIN_TELEGRAM_ID, ADMIN_PASSWORD
 
@@ -24,8 +23,7 @@ user_editing_state = {}
 
 diagnostic = {
     "techcrunch": 0,
-    "zoomit": 0,
-    "digiato": 0,
+    "ars_technica": 0,
     "gemini": "OK",
     "image_ai": "OK",
     "telegram": "OK",
@@ -43,37 +41,54 @@ def clean_html_formatting(text: str) -> str:
     return text
 
 def generate_hashtags(text: str) -> str:
-    """
-    تولید هشتگ ساده از متن خبر
-    """
+    """Generate concise English hashtags from the generated article text."""
 
-    words = text.split()
+    keywords = {
+        "artificial intelligence": "#AI",
+        "ai": "#AI",
+        "machine learning": "#MachineLearning",
+        "deep learning": "#DeepLearning",
+        "chatgpt": "#ChatGPT",
+        "openai": "#OpenAI",
+        "anthropic": "#Anthropic",
+        "claude": "#Claude",
+        "gemini": "#Gemini",
+        "cybersecurity": "#Cybersecurity",
+        "cyber security": "#Cybersecurity",
+        "security": "#Security",
+        "hacking": "#Hacking",
+        "hack": "#Hacking",
+        "cloud computing": "#CloudComputing",
+        "cloud": "#Cloud",
+        "robotics": "#Robotics",
+        "robot": "#Robotics",
+        "startup": "#Startups",
+        "startups": "#Startups",
+        "hardware": "#Hardware",
+        "software": "#Software",
+        "semiconductor": "#Semiconductors",
+        "chip": "#Chips",
+        "data center": "#DataCenter",
+        "data centre": "#DataCenter",
+        "crypto": "#Crypto",
+        "cryptocurrency": "#Cryptocurrency",
+        "blockchain": "#Blockchain",
+        "google": "#Google",
+        "apple": "#Apple",
+        "microsoft": "#Microsoft"
+    }
 
+    text_lower = text.lower()
     hashtags = []
 
-    keywords = [
-        "هوش_مصنوعی",
-        "فناوری",
-        "تکنولوژی",
-        "گجت",
-        "موبایل",
-        "اینترنت",
-        "گوگل",
-        "اپل",
-        "مایکروسافت",
-        "ربات",
-        "کامپیوتر",
-        "امنیت"
-    ]
-
-    for word in keywords:
-        if word.replace("_", " ") in text:
-            hashtags.append("#" + word)
+    for keyword, hashtag in keywords.items():
+        if keyword in text_lower and hashtag not in hashtags:
+            hashtags.append(hashtag)
 
     if not hashtags:
-        hashtags.append("#اخبار_فناوری")
+        hashtags.append("#Technology")
 
-    return " ".join(hashtags)
+    return " ".join(hashtags[:6])
 
 
 def get_persian_tone_name(tone: str) -> str:
@@ -288,7 +303,7 @@ async def send_safe_news(
 
         return None
 # =============================================================
-# بخش موتور اصلی ربات (اسکرپ موازی و ۳ تایی اخبار)
+# بخش موتور اصلی ربات (اسکرپ منابع انگلیسی)
 # =============================================================
 async def check_and_process_news(app_bot) -> None:
     """
@@ -313,8 +328,7 @@ async def check_and_process_news(app_bot) -> None:
         all_articles = []
 
         diagnostic["techcrunch"] = 0
-        diagnostic["zoomit"] = 0
-        diagnostic["digiato"] = 0
+        diagnostic["ars_technica"] = 0
 
         # ==================================================
         # TechCrunch
@@ -342,53 +356,36 @@ async def check_and_process_news(app_bot) -> None:
             )
 
         # ==================================================
-        # Zoomit
+        # Ars Technica
         # ==================================================
 
         try:
 
-            zoomit_articles = scrape_zoomit()
+            ars_articles = scrape_ars_technica(
+                max_articles=5
+            )
 
-            diagnostic["zoomit"] = len(zoomit_articles)
+            diagnostic["ars_technica"] = len(
+                ars_articles
+            )
 
-            all_articles.extend(zoomit_articles)
+            all_articles.extend(
+                ars_articles
+            )
 
             print(
-                f"[SCRAPER] Zoomit -> "
-                f"{len(zoomit_articles)} article(s)"
+                f"[SCRAPER] Ars Technica -> "
+                f"{len(ars_articles)} article(s)"
             )
 
         except Exception as e:
 
-            diagnostic["last_error"] = f"Zoomit: {e}"
-
-            print(
-                f"[ZOOMIT ERROR] {e}"
+            diagnostic["last_error"] = (
+                f"Ars Technica: {e}"
             )
 
-        # ==================================================
-        # Digiato
-        # ==================================================
-
-        try:
-
-            digiato_articles = scrape_digiato()
-
-            diagnostic["digiato"] = len(digiato_articles)
-
-            all_articles.extend(digiato_articles)
-
             print(
-                f"[SCRAPER] Digiato -> "
-                f"{len(digiato_articles)} article(s)"
-            )
-
-        except Exception as e:
-
-            diagnostic["last_error"] = f"Digiato: {e}"
-
-            print(
-                f"[DIGIATO ERROR] {e}"
+                f"[ARS TECHNICA ERROR] {e}"
             )
 
         # ==================================================
@@ -1084,60 +1081,9 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
                     await query.message.reply_text(
                         "📭 هیچ خبر پردازش‌شده‌ای وجود ندارد."
                     )
-
                     return
 
-                text = (
-                    "📰 <b>آخرین اخبار پردازش‌شده</b>\n\n"
-                )
-
-                for news in rows:
-                    news_id = news[0]
-                    title = news[1]
-                    source = news[2]
-                    processed_at = news[4]
-
-                    text += (
-                        f"🔹 <b>{html.escape(title)}</b>\n"
-                        f"📡 منبع: {html.escape(source)}</b>\n"
-                        f"🕐 زمان پردازش: "
-                        f"{html.escape(str(processed_at))}\n"
-                        f"🆔 شناسه: <code>{news_id}</code>\n\n"
-                    )
-
-                await query.message.reply_text(
-                    text,
-                    parse_mode="HTML"
-                )
-
-            except Exception as e:
-
-                print(
-                    f"[COMPLETED NEWS ERROR] {e}"
-                )
-
-                await query.message.reply_text(
-                    "❌ خطا در دریافت اخبار پردازش‌شده."
-                )
-
-        elif data == "completed_news":
-
-            try:
-
-                rows = database.get_completed_news(
-                    limit=10
-                )
-
-                if not rows:
-                    await query.message.reply_text(
-                        "📭 هیچ خبر پردازش‌شده‌ای وجود ندارد."
-                    )
-
-                    return
-
-                text = (
-                    "📰 <b>آخرین اخبار پردازش‌شده</b>\n\n"
-                )
+                text = "📰 <b>آخرین اخبار پردازش‌شده</b>\n\n"
 
                 for news in rows:
                     news_id = news[0]
@@ -1148,8 +1094,7 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
                     text += (
                         f"🔹 <b>{html.escape(title)}</b>\n"
                         f"📡 منبع: <b>{html.escape(source)}</b>\n"
-                        f"🕐 زمان پردازش: "
-                        f"{html.escape(str(processed_at))}\n"
+                        f"🕐 زمان پردازش: {html.escape(str(processed_at))}\n"
                         f"🆔 شناسه: <code>{news_id}</code>\n\n"
                     )
 
@@ -1167,63 +1112,13 @@ async def handle_panel_buttons(update: Update, context: ContextTypes.DEFAULT_TYP
                 await query.message.reply_text(
                     "❌ خطا در دریافت اخبار پردازش‌شده."
                 )
-
-        elif data == "completed_news":
-
-            try:
-
-                rows = database.get_completed_news(
-                    limit=10
-                )
-
-                if not rows:
-                    await query.message.reply_text(
-                        "📭 هیچ خبر پردازش‌شده‌ای وجود ندارد."
-                    )
-
-                    return
-
-                text = (
-                    "📰 <b>آخرین اخبار پردازش‌شده</b>\n\n"
-                )
-
-                for news in rows:
-                    news_id = news[0]
-                    title = news[1]
-                    source = news[2]
-                    processed_at = news[4]
-
-                    text += (
-                        f"🔹 <b>{html.escape(title)}</b>\n"
-                        f"📡 منبع: <b>{html.escape(source)}</b>\n"
-                        f"🕐 زمان پردازش: "
-                        f"{html.escape(str(processed_at))}\n"
-                        f"🆔 شناسه: <code>{news_id}</code>\n\n"
-                    )
-
-                await query.message.reply_text(
-                    text,
-                    parse_mode="HTML"
-                )
-
-            except Exception as e:
-
-                print(
-                    f"[COMPLETED NEWS ERROR] {e}"
-                )
-
-                await query.message.reply_text(
-                    "❌ خطا در دریافت اخبار پردازش‌شده."
-                )
-
 
         elif data == "diagnostic":
 
             report = (
                 f"🩺 گزارش سلامت سیستم\n\n"
                 f"TechCrunch: {diagnostic.get('techcrunch',0)}\n"
-                f"Zoomit: {diagnostic.get('zoomit',0)}\n"
-                f"Digiato: {diagnostic.get('digiato',0)}\n\n"
+                f"Ars Technica: {diagnostic.get('ars_technica',0)}\n\n"
                 f"Gemini:\n{diagnostic.get('gemini','OK')}\n\n"
                 f"Image AI:\n{diagnostic.get('image_ai','OK')}\n\n"
                 f"Telegram:\n{diagnostic.get('telegram','OK')}\n\n"
