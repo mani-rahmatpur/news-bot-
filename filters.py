@@ -200,7 +200,7 @@ def normalize_text(text: str) -> str:
     if not text:
         return ""
 
-    text = text.lower()
+    text = str(text).lower()
 
     # حذف فاصله‌های اضافی
     text = re.sub(r"\s+", " ", text)
@@ -212,12 +212,12 @@ def normalize_text(text: str) -> str:
 
 
 # ============================================================
-# تطبیق کلمه یا عبارت
+# تطبیق دقیق کلمه یا عبارت
 # ============================================================
 
 def keyword_matches(text: str, keyword: str) -> bool:
     """
-    بررسی دقیق یک keyword.
+    بررسی دقیق keyword.
 
     برای کلمات کوتاه مثل:
         ai
@@ -225,11 +225,8 @@ def keyword_matches(text: str, keyword: str) -> bool:
         gpu
         aws
 
-    از word boundary استفاده می‌کنیم تا
+    از word boundary منطقی استفاده می‌شود تا
     داخل کلمات دیگر match نشوند.
-
-    برای عبارت‌های چندکلمه‌ای نیز
-    همین روش تا حد زیادی از false positive جلوگیری می‌کند.
     """
 
     text = normalize_text(text)
@@ -240,13 +237,20 @@ def keyword_matches(text: str, keyword: str) -> bool:
 
     escaped_keyword = re.escape(keyword)
 
-    pattern = rf"(?<![a-z0-9]){escaped_keyword}(?![a-z0-9])"
+    pattern = (
+        rf"(?<![a-z0-9])"
+        rf"{escaped_keyword}"
+        rf"(?![a-z0-9])"
+    )
 
-    return re.search(
-        pattern,
-        text,
-        flags=re.IGNORECASE
-    ) is not None
+    return (
+        re.search(
+            pattern,
+            text,
+            flags=re.IGNORECASE
+        )
+        is not None
+    )
 
 
 # ============================================================
@@ -266,31 +270,18 @@ def is_english_text(text: str) -> bool:
     persian_chars = 0
     latin_chars = 0
 
-    for char in text:
+    for char in str(text):
 
-        if (
-            "\u0600"
-            <= char
-            <= "\u06FF"
-        ):
+        if "\u0600" <= char <= "\u06FF":
             persian_chars += 1
 
-        elif (
-            "a"
-            <= char.lower()
-            <= "z"
-        ):
+        elif "a" <= char.lower() <= "z":
             latin_chars += 1
 
-    # برای متن بسیار کوتاه
+    # متن خیلی کوتاه
     if latin_chars < 20:
         return False
 
-    # اگر متن فارسی قابل‌توجهی داشته باشد
-    if persian_chars > 20:
-        return False
-
-    # نسبت حروف انگلیسی به فارسی
     total_letters = (
         latin_chars
         + persian_chars
@@ -303,6 +294,10 @@ def is_english_text(text: str) -> bool:
         latin_chars
         / total_letters
     )
+
+    # وجود مقدار قابل توجه متن فارسی ممنوع است
+    if persian_chars > 20:
+        return False
 
     return english_ratio >= 0.85
 
@@ -317,6 +312,7 @@ def is_technology_relevant(
 ) -> bool:
     """
     بررسی می‌کند آیا خبر:
+
     1. انگلیسی است
     2. خبر خرید / قیمت / راهنمای خرید نیست
     3. حداقل در یکی از حوزه‌های فناوری قرار دارد
@@ -334,7 +330,7 @@ def is_technology_relevant(
     ).strip()
 
     # ========================================================
-    # 1. زبان
+    # 1. بررسی زبان
     # ========================================================
 
     if not is_english_text(full_text):
