@@ -2,35 +2,19 @@ import re
 
 
 # ============================================================
-# Crypto
+# Strong technology keywords
 # ============================================================
 
-CRYPTO_KEYWORDS = [
-    "bitcoin",
-    "ethereum",
-    "crypto",
-    "cryptocurrency",
-    "blockchain",
-    "web3",
-    "nft",
-    "token",
-    "defi",
-]
+STRONG_KEYWORDS = [
 
-
-# ============================================================
-# Artificial Intelligence
-# ============================================================
-
-AI_KEYWORDS = [
-    "ai",
+    # AI
     "artificial intelligence",
     "generative ai",
     "machine learning",
     "deep learning",
-    "llm",
     "large language model",
     "language model",
+    "llm",
     "gpt",
     "chatgpt",
     "openai",
@@ -38,196 +22,203 @@ AI_KEYWORDS = [
     "claude",
     "gemini",
     "copilot",
+
+    # Security
+    "cybersecurity",
+    "cyber security",
+    "hacking",
+    "hacker",
+    "malware",
+    "ransomware",
+    "phishing",
+    "vulnerability",
+    "zero-day",
+    "0-day",
+    "data breach",
+    "security breach",
+
+    # Cloud / Infrastructure
+    "cloud computing",
+    "cloud infrastructure",
+    "data center",
+    "data centre",
+    "server infrastructure",
+
+    # Hardware
+    "semiconductor",
+    "semiconductors",
+    "chip",
+    "chips",
+    "gpu",
+    "cpu",
+    "processor",
+
+    # Robotics
+    "robotics",
+    "robot",
+    "robots",
+    "drone",
+    "drones",
+    "humanoid",
+    "robotaxi",
+    "autonomous robot",
+
+    # Crypto / Web3
+    "bitcoin",
+    "ethereum",
+    "cryptocurrency",
+    "blockchain",
+    "web3",
+    "defi",
 ]
 
 
 # ============================================================
-# General Technology
+# Medium technology keywords
 # ============================================================
 
-TECH_KEYWORDS = [
-    "technology",
-    "tech",
+MEDIUM_KEYWORDS = [
+
+    "ai",
+    "robot",
+    "robots",
+    "drone",
+    "drones",
+    "autonomous",
+    "automation",
+
+    "cloud",
+    "aws",
+    "azure",
+    "google cloud",
+
     "software",
     "hardware",
     "developer",
     "programming",
     "coding",
     "computer",
-    "processor",
-    "cpu",
-    "gpu",
-    "chip",
-    "chips",
-    "semiconductor",
     "operating system",
     "linux",
     "windows",
     "android",
     "ios",
-    "apple",
-    "microsoft",
-    "google",
-]
 
-
-# ============================================================
-# Cloud / Data
-# ============================================================
-
-CLOUD_DATA_KEYWORDS = [
-    "cloud",
-    "cloud computing",
-    "cloud infrastructure",
-    "aws",
-    "azure",
-    "google cloud",
-    "data center",
-    "data centre",
-    "database",
-    "data breach",
-]
-
-
-# ============================================================
-# Security
-# ============================================================
-
-SECURITY_KEYWORDS = [
-    "security",
-    "cybersecurity",
-    "cyber security",
-    "hack",
-    "hacker",
-    "hacking",
-    "malware",
-    "ransomware",
-    "phishing",
-    "vulnerability",
-    "exploit",
-    "zero-day",
-    "0-day",
-    "data breach",
-    "privacy",
-]
-
-
-# ============================================================
-# Robotics / Automation
-# ============================================================
-
-ROBOTICS_KEYWORDS = [
-    "robot",
-    "robots",
-    "robotics",
-    "humanoid",
-    "autonomous",
-    "automation",
-    "drone",
-    "robotaxi",
-]
-
-
-# ============================================================
-# Startup / Business Technology
-# ============================================================
-
-STARTUP_BUSINESS_KEYWORDS = [
     "startup",
-    "startups",
     "venture",
-    "funding",
-    "fundraising",
-    "acquisition",
-    "investment",
-    "valuation",
+
     "enterprise",
     "saas",
+
+    "crypto",
+    "token",
+    "nft",
+
+    "privacy",
+    "security",
+    "hack",
 ]
 
 
 # ============================================================
-# Block / Reject Keywords
+# Business/context keywords
 #
-# این کلمات فقط روی TITLE بررسی می‌شوند.
+# این‌ها به تنهایی خبر فناوری محسوب نمی‌شوند.
+# ============================================================
+
+BUSINESS_KEYWORDS = [
+    "funding",
+    "fundraise",
+    "fundraising",
+    "investment",
+    "valuation",
+    "acquisition",
+    "acquires",
+    "acquired",
+]
+
+
+# ============================================================
+# Block keywords
+#
+# فقط عنوان بررسی می‌شود.
 # ============================================================
 
 BLOCK_KEYWORDS = [
-    "price",
-    "pricing",
-    "buy",
+
+    # Shopping
     "buying guide",
-    "purchase",
-    "deal",
-    "deals",
-    "discount",
-    "best phone",
-    "best phones",
-    "best laptop",
-    "best laptops",
-    "budget phone",
-    "budget phones",
-    "budget laptop",
-    "budget laptops",
     "price comparison",
+    "best phones",
+    "best phone",
+    "best laptops",
+    "best laptop",
+    "budget phones",
+    "budget phone",
+    "budget laptops",
+    "budget laptop",
+    "phone deals",
+    "laptop deals",
+    "smartphone deals",
+    "pricing",
+
+    # Events / promotion
+    "conference",
+    "conference tickets",
+    "event",
+    "events",
+    "summit",
+    "disrupt",
+    "side event",
+    "ticket",
+    "tickets",
+    "webinar",
+    "newsletter",
+    "podcast",
+    "advertisement",
+    "sponsored",
+
+    # Archive / navigation
+    "archive",
+    "archives",
+    "download archive",
 ]
 
 
 # ============================================================
-# همه کلیدواژه‌های تکنولوژی
-# ============================================================
-
-ALL_TECH_KEYWORDS = (
-    CRYPTO_KEYWORDS
-    + AI_KEYWORDS
-    + TECH_KEYWORDS
-    + CLOUD_DATA_KEYWORDS
-    + SECURITY_KEYWORDS
-    + ROBOTICS_KEYWORDS
-    + STARTUP_BUSINESS_KEYWORDS
-)
-
-
-# ============================================================
-# نرمال‌سازی متن
+# Normalize
 # ============================================================
 
 def normalize_text(text: str) -> str:
-    """
-    نرمال‌سازی ساده برای جست‌وجوی دقیق‌تر.
-    """
 
     if not text:
         return ""
 
     text = str(text).lower()
 
-    # حذف فاصله‌های اضافی
-    text = re.sub(r"\s+", " ", text)
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
 
-    # تبدیل بعضی علائم به فاصله
-    text = re.sub(r"[_/|]+", " ", text)
+    text = re.sub(
+        r"[_/|]+",
+        " ",
+        text
+    )
 
     return text.strip()
 
 
 # ============================================================
-# تطبیق دقیق کلمه یا عبارت
+# Exact keyword matching
 # ============================================================
 
-def keyword_matches(text: str, keyword: str) -> bool:
-    """
-    بررسی دقیق keyword.
-
-    برای کلمات کوتاه مثل:
-        ai
-        cpu
-        gpu
-        aws
-
-    از word boundary منطقی استفاده می‌شود تا
-    داخل کلمات دیگر match نشوند.
-    """
+def keyword_matches(
+    text: str,
+    keyword: str
+) -> bool:
 
     text = normalize_text(text)
     keyword = normalize_text(keyword)
@@ -235,12 +226,10 @@ def keyword_matches(text: str, keyword: str) -> bool:
     if not text or not keyword:
         return False
 
-    escaped_keyword = re.escape(keyword)
-
     pattern = (
-        rf"(?<![a-z0-9])"
-        rf"{escaped_keyword}"
-        rf"(?![a-z0-9])"
+        r"(?<![a-z0-9])"
+        + re.escape(keyword)
+        + r"(?![a-z0-9])"
     )
 
     return (
@@ -254,31 +243,25 @@ def keyword_matches(text: str, keyword: str) -> bool:
 
 
 # ============================================================
-# تشخیص زبان انگلیسی
+# English detection
 # ============================================================
 
 def is_english_text(text: str) -> bool:
-    """
-    جلوگیری از ورود محتوای فارسی یا غیرانگلیسی.
-
-    منبع باید عمدتاً انگلیسی باشد.
-    """
 
     if not text:
         return False
 
-    persian_chars = 0
     latin_chars = 0
+    persian_chars = 0
 
     for char in str(text):
 
-        if "\u0600" <= char <= "\u06FF":
-            persian_chars += 1
-
-        elif "a" <= char.lower() <= "z":
+        if "a" <= char.lower() <= "z":
             latin_chars += 1
 
-    # متن خیلی کوتاه
+        elif "\u0600" <= char <= "\u06FF":
+            persian_chars += 1
+
     if latin_chars < 20:
         return False
 
@@ -295,28 +278,20 @@ def is_english_text(text: str) -> bool:
         / total_letters
     )
 
-    # وجود مقدار قابل توجه متن فارسی ممنوع است
-    if persian_chars > 20:
-        return False
-
-    return english_ratio >= 0.85
+    return (
+        english_ratio >= 0.85
+        and persian_chars <= 20
+    )
 
 
 # ============================================================
-# تشخیص ارتباط تکنولوژیک
+# Technology relevance
 # ============================================================
 
 def is_technology_relevant(
     title: str,
     content: str
 ) -> bool:
-    """
-    بررسی می‌کند آیا خبر:
-
-    1. انگلیسی است
-    2. خبر خرید / قیمت / راهنمای خرید نیست
-    3. حداقل در یکی از حوزه‌های فناوری قرار دارد
-    """
 
     title = title or ""
     content = content or ""
@@ -324,16 +299,19 @@ def is_technology_relevant(
     normalized_title = normalize_text(title)
     normalized_content = normalize_text(content)
 
-    full_text = (
-        f"{normalized_title} "
-        f"{normalized_content}"
-    ).strip()
+    # --------------------------------------------------------
+    # Language check
+    # --------------------------------------------------------
 
-    # ========================================================
-    # 1. بررسی زبان
-    # ========================================================
+    language_sample = (
+        normalized_title
+        + " "
+        + normalized_content[:2500]
+    )
 
-    if not is_english_text(full_text):
+    if not is_english_text(
+        language_sample
+    ):
 
         print(
             f"[FILTER NON-ENGLISH] {title}"
@@ -341,12 +319,9 @@ def is_technology_relevant(
 
         return False
 
-    # ========================================================
-    # 2. حذف خبرهای خرید / قیمت
-    #
-    # فقط TITLE بررسی می‌شود تا عباراتی که در متن مقاله
-    # آمده‌اند باعث حذف اشتباه خبر نشوند.
-    # ========================================================
+    # --------------------------------------------------------
+    # Block title
+    # --------------------------------------------------------
 
     for keyword in BLOCK_KEYWORDS:
 
@@ -362,27 +337,160 @@ def is_technology_relevant(
 
             return False
 
-    # ========================================================
-    # 3. بررسی حوزه‌های تکنولوژی
-    # ========================================================
+    # --------------------------------------------------------
+    # Strong keyword in title
+    # --------------------------------------------------------
 
-    for keyword in ALL_TECH_KEYWORDS:
+    for keyword in STRONG_KEYWORDS:
 
         if keyword_matches(
-            full_text,
+            normalized_title,
             keyword
         ):
 
             print(
-                f"[FILTER MATCH] "
+                f"[FILTER STRONG TITLE] "
                 f"{keyword} -> {title}"
             )
 
             return True
 
-    # ========================================================
-    # 4. بدون تطابق
-    # ========================================================
+    # --------------------------------------------------------
+    # Strong keyword in content
+    # --------------------------------------------------------
+
+    strong_matches = []
+
+    for keyword in STRONG_KEYWORDS:
+
+        if keyword_matches(
+            normalized_content,
+            keyword
+        ):
+
+            strong_matches.append(
+                keyword
+            )
+
+    # یک strong keyword در متن معمولاً کافی است،
+    # چون این‌ها مشخصاً فناوری هستند.
+    if strong_matches:
+
+        print(
+            f"[FILTER STRONG CONTENT] "
+            f"{strong_matches[0]} -> {title}"
+        )
+
+        return True
+
+    # --------------------------------------------------------
+    # Medium keyword detection
+    #
+    # duplicate concepts مثل startup/startups
+    # فقط یک match حساب می‌شوند.
+    # --------------------------------------------------------
+
+    medium_matches = set()
+
+    for keyword in MEDIUM_KEYWORDS:
+
+        if (
+            keyword_matches(
+                normalized_title,
+                keyword
+            )
+            or
+            keyword_matches(
+                normalized_content,
+                keyword
+            )
+        ):
+
+            normalized_keyword = keyword
+
+            # گروه‌بندی ساده
+            if normalized_keyword in {
+                "startup",
+                "startups",
+            }:
+                normalized_keyword = "startup"
+
+            elif normalized_keyword in {
+                "robot",
+                "robots",
+            }:
+                normalized_keyword = "robot"
+
+            elif normalized_keyword in {
+                "drone",
+                "drones",
+            }:
+                normalized_keyword = "drone"
+
+            medium_matches.add(
+                normalized_keyword
+            )
+
+    # --------------------------------------------------------
+    # Business keywords
+    # --------------------------------------------------------
+
+    business_matches = set()
+
+    for keyword in BUSINESS_KEYWORDS:
+
+        if keyword_matches(
+            normalized_title,
+            keyword
+        ):
+
+            business_matches.add(
+                keyword
+            )
+
+    # --------------------------------------------------------
+    # قانون پذیرش medium
+    #
+    # business-only -> reject
+    #
+    # medium + business -> accept
+    #
+    # دو medium مستقل -> accept
+    # --------------------------------------------------------
+
+    if len(medium_matches) >= 2:
+
+        matches = sorted(
+            medium_matches
+        )
+
+        print(
+            f"[FILTER MEDIUM MATCH] "
+            f"{matches[:6]} -> {title}"
+        )
+
+        return True
+
+    if (
+        medium_matches
+        and business_matches
+    ):
+
+        matches = (
+            sorted(medium_matches)
+            + sorted(business_matches)
+        )
+
+        print(
+            f"[FILTER MEDIUM + BUSINESS] "
+            f"{matches[:6]} -> {title}"
+        )
+
+        return True
+
+    # --------------------------------------------------------
+    # هیچ تطابق قابل‌اعتماد
+    # --------------------------------------------------------
 
     print(
         f"[FILTER NO MATCH] {title}"
